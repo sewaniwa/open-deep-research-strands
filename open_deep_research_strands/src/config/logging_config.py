@@ -4,17 +4,23 @@ Logging configuration for Open Deep Research Strands project.
 import logging
 import sys
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, Union
 
-import structlog
-from structlog.typing import FilteringBoundLogger
+# Try to import structlog, fall back to standard logging if not available
+try:
+    import structlog
+    from structlog.typing import FilteringBoundLogger
+    HAS_STRUCTLOG = True
+except ImportError:
+    HAS_STRUCTLOG = False
+    FilteringBoundLogger = logging.Logger
 
 
 def setup_logging(
     log_level: str = "INFO", 
     log_file: str = None,
     debug_mode: bool = False
-) -> FilteringBoundLogger:
+) -> Union[FilteringBoundLogger, logging.Logger]:
     """
     Setup structured logging for the application.
     
@@ -24,14 +30,26 @@ def setup_logging(
         debug_mode: Enable debug mode with detailed logging
         
     Returns:
-        Configured structlog logger
+        Configured logger (structlog if available, otherwise standard logging)
     """
     # Configure standard logging
+    log_format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    if debug_mode:
+        log_format = "%(asctime)s - %(name)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s"
+    
     logging.basicConfig(
         level=getattr(logging, log_level.upper()),
-        format="%(message)s",
+        format=log_format,
         stream=sys.stdout,
     )
+    
+    if not HAS_STRUCTLOG:
+        # Fall back to standard logging
+        logger = logging.getLogger("open_deep_research_strands")
+        logger.info(
+            f"Logging configured (standard logging) - log_level={log_level}, debug_mode={debug_mode}"
+        )
+        return logger
     
     # Configure structlog processors
     processors = [
@@ -80,7 +98,7 @@ def setup_logging(
     return logger
 
 
-def get_logger(name: str = None) -> FilteringBoundLogger:
+def get_logger(name: str = None) -> Union[FilteringBoundLogger, logging.Logger]:
     """
     Get a logger instance for a specific module.
     
@@ -90,6 +108,10 @@ def get_logger(name: str = None) -> FilteringBoundLogger:
     Returns:
         Configured logger instance
     """
+    if not HAS_STRUCTLOG:
+        # Fall back to standard logging
+        return logging.getLogger(name or "open_deep_research_strands")
+    
     if name:
         return structlog.get_logger(name)
     return structlog.get_logger("open_deep_research_strands")
@@ -101,23 +123,29 @@ class LoggerMixin:
     """
     
     @property
-    def logger(self) -> FilteringBoundLogger:
+    def logger(self) -> Union[FilteringBoundLogger, logging.Logger]:
         """Get logger instance for this class."""
         class_name = f"{self.__class__.__module__}.{self.__class__.__name__}"
         return get_logger(class_name)
     
     def log_method_entry(self, method_name: str, **kwargs):
         """Log method entry with parameters."""
-        self.logger.debug(
-            f"Entering {method_name}",
-            method=method_name,
-            **kwargs
-        )
+        if HAS_STRUCTLOG:
+            self.logger.debug(
+                f"Entering {method_name}",
+                method=method_name,
+                **kwargs
+            )
+        else:
+            self.logger.debug(f"Entering {method_name} - {kwargs}")
     
     def log_method_exit(self, method_name: str, **kwargs):
         """Log method exit with results."""
-        self.logger.debug(
-            f"Exiting {method_name}",
-            method=method_name,
-            **kwargs
-        )
+        if HAS_STRUCTLOG:
+            self.logger.debug(
+                f"Exiting {method_name}",
+                method=method_name,
+                **kwargs
+            )
+        else:
+            self.logger.debug(f"Exiting {method_name} - {kwargs}")

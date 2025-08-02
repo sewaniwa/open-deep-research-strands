@@ -7,8 +7,14 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Union
 from dataclasses import dataclass, asdict
-import aiofiles
 import hashlib
+
+# Try to import aiofiles, fall back to regular file operations
+try:
+    import aiofiles
+    HAS_AIOFILES = True
+except ImportError:
+    HAS_AIOFILES = False
 
 from ..config.logging_config import LoggerMixin
 
@@ -67,8 +73,7 @@ class LocalMemorySystem(LoggerMixin):
         self.sessions_path.mkdir(exist_ok=True)
         self.cache_path.mkdir(exist_ok=True)
         
-        self.logger.info("Local memory system initialized", 
-                        storage_path=str(self.storage_path))
+        self.logger.info(f"Local memory system initialized - storage_path={str(self.storage_path)}")
     
     async def create_namespace(self, namespace: str, **options) -> str:
         """
@@ -93,10 +98,14 @@ class LocalMemorySystem(LoggerMixin):
                 "entry_count": 0
             }
             
-            async with aiofiles.open(namespace_file, 'w') as f:
-                await f.write(json.dumps(metadata, indent=2))
+            if HAS_AIOFILES:
+                async with aiofiles.open(namespace_file, 'w') as f:
+                    await f.write(json.dumps(metadata, indent=2))
+            else:
+                with open(namespace_file, 'w') as f:
+                    f.write(json.dumps(metadata, indent=2))
             
-            self.logger.info("Created memory namespace", namespace=namespace)
+            self.logger.info(f"Created memory namespace - namespace={namespace}")
         
         return namespace
     
@@ -143,8 +152,7 @@ class LocalMemorySystem(LoggerMixin):
         # Persist to file
         await self._persist_entry(entry)
         
-        self.logger.debug("Stored memory entry", 
-                         namespace=namespace, key=key, entry_id=entry_id)
+        self.logger.debug(f"Stored memory entry - namespace={namespace}, key={key}, entry_id={entry_id}")
         
         return entry_id
     
@@ -209,7 +217,7 @@ class LocalMemorySystem(LoggerMixin):
         if entry_file.exists():
             entry_file.unlink()
         
-        self.logger.debug("Deleted memory entry", namespace=namespace, key=key)
+        self.logger.debug(f"Deleted memory entry - namespace={namespace}, key={key}")
         return True
     
     async def list_entries(self, namespace: str) -> List[str]:
@@ -301,7 +309,7 @@ class LocalMemorySystem(LoggerMixin):
                     await self.delete(ns, key)
                     cleaned_count += 1
         
-        self.logger.info("Cleaned up expired entries", count=cleaned_count)
+        self.logger.info(f"Cleaned up expired entries - count={cleaned_count}")
         return cleaned_count
     
     def _generate_entry_id(self, namespace: str, key: str) -> str:
@@ -317,8 +325,12 @@ class LocalMemorySystem(LoggerMixin):
         """Persist entry to disk."""
         entry_file = self._get_entry_file_path(entry.id)
         
-        async with aiofiles.open(entry_file, 'w') as f:
-            await f.write(json.dumps(entry.to_dict(), indent=2))
+        if HAS_AIOFILES:
+            async with aiofiles.open(entry_file, 'w') as f:
+                await f.write(json.dumps(entry.to_dict(), indent=2))
+        else:
+            with open(entry_file, 'w') as f:
+                f.write(json.dumps(entry.to_dict(), indent=2))
     
     async def _load_namespace(self, namespace: str):
         """Load namespace from disk."""
@@ -328,8 +340,12 @@ class LocalMemorySystem(LoggerMixin):
             return
         
         try:
-            async with aiofiles.open(namespace_file, 'r') as f:
-                metadata = json.loads(await f.read())
+            if HAS_AIOFILES:
+                async with aiofiles.open(namespace_file, 'r') as f:
+                    metadata = json.loads(await f.read())
+            else:
+                with open(namespace_file, 'r') as f:
+                    metadata = json.loads(f.read())
             
             # Load entries
             self.namespaces[namespace] = {}
@@ -337,8 +353,12 @@ class LocalMemorySystem(LoggerMixin):
             # Find all entry files for this namespace
             for entry_file in self.cache_path.glob("*.json"):
                 try:
-                    async with aiofiles.open(entry_file, 'r') as f:
-                        entry_data = json.loads(await f.read())
+                    if HAS_AIOFILES:
+                        async with aiofiles.open(entry_file, 'r') as f:
+                            entry_data = json.loads(await f.read())
+                    else:
+                        with open(entry_file, 'r') as f:
+                            entry_data = json.loads(f.read())
                     
                     if entry_data.get("namespace") == namespace:
                         entry = MemoryEntry.from_dict(entry_data)
@@ -349,9 +369,7 @@ class LocalMemorySystem(LoggerMixin):
                 except Exception as e:
                     self.logger.warning(f"Failed to load entry {entry_file}: {e}")
             
-            self.logger.debug("Loaded namespace from disk", 
-                            namespace=namespace, 
-                            entries=len(self.namespaces[namespace]))
+            self.logger.debug(f"Loaded namespace from disk - namespace={namespace}, entries={len(self.namespaces[namespace])}")
             
         except Exception as e:
             self.logger.error(f"Failed to load namespace {namespace}: {e}")

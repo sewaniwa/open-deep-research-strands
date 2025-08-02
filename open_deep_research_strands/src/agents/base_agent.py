@@ -102,10 +102,7 @@ class BaseResearchAgent(ABC, LoggerMixin):
         self.total_execution_time = 0.0
         self.last_activity = datetime.utcnow().isoformat()
         
-        self.logger.info("Agent initialized", 
-                        agent_id=self.agent_id, 
-                        role=self.role, 
-                        capabilities=self.capabilities)
+        self.logger.info(f"Agent initialized - agent_id={self.agent_id}, role={self.role}, capabilities={self.capabilities}")
     
     async def initialize(self, session_id: str = None) -> bool:
         """
@@ -127,7 +124,12 @@ class BaseResearchAgent(ABC, LoggerMixin):
             self.memory_system = self.sdk_manager.get_memory_system()
             
             # Initialize LLM manager
-            from ..configs.local_config import get_config
+            import sys
+            from pathlib import Path
+            # Add project root to Python path
+            project_root = Path(__file__).parent.parent.parent
+            sys.path.insert(0, str(project_root))
+            from configs.local_config import get_config
             config = get_config()
             self.llm_manager = LLMManager(config)
             
@@ -147,16 +149,12 @@ class BaseResearchAgent(ABC, LoggerMixin):
             )
             
             self.is_active = True
-            self.logger.info("Agent initialized successfully", 
-                           agent_id=self.agent_id,
-                           session_id=self.session_id)
+            self.logger.info(f"Agent initialized successfully - agent_id={self.agent_id}, session_id={self.session_id}")
             
             return True
             
         except Exception as e:
-            self.logger.error("Agent initialization failed", 
-                            agent_id=self.agent_id, 
-                            error=str(e))
+            self.logger.error(f"Agent initialization failed - agent_id={self.agent_id}, error={str(e)}")
             return False
     
     @abstractmethod
@@ -200,9 +198,7 @@ class BaseResearchAgent(ABC, LoggerMixin):
             return response.content
             
         except Exception as e:
-            self.logger.error("LLM processing failed", 
-                            agent_id=self.agent_id, 
-                            error=str(e))
+            self.logger.error(f"LLM processing failed - agent_id={self.agent_id}, error={str(e)}")
             raise
     
     async def store_memory(self, key: str, data: Any, ttl: int = None) -> str:
@@ -267,12 +263,10 @@ class BaseResearchAgent(ABC, LoggerMixin):
                 await self.runtime.terminate_session(self.session_id)
             
             self.is_active = False
-            self.logger.info("Agent shutdown completed", agent_id=self.agent_id)
+            self.logger.info(f"Agent shutdown completed - agent_id={self.agent_id}")
             
         except Exception as e:
-            self.logger.error("Agent shutdown failed", 
-                            agent_id=self.agent_id, 
-                            error=str(e))
+            self.logger.error(f"Agent shutdown failed - agent_id={self.agent_id}, error={str(e)}")
     
     def get_status(self) -> Dict[str, Any]:
         """Get agent status information."""
@@ -315,10 +309,7 @@ class BaseResearchAgent(ABC, LoggerMixin):
             result.execution_time = asyncio.get_event_loop().time() - start_time
             self.total_execution_time += result.execution_time
             
-            self.logger.info("Task completed successfully",
-                           agent_id=self.agent_id,
-                           task_id=task_data.task_id,
-                           execution_time=result.execution_time)
+            self.logger.info(f"Task completed successfully - agent_id={self.agent_id}, task_id={task_data.task_id}, execution_time={result.execution_time}")
             
             return result
             
@@ -335,10 +326,7 @@ class BaseResearchAgent(ABC, LoggerMixin):
                 execution_time=execution_time
             )
             
-            self.logger.error("Task execution failed",
-                            agent_id=self.agent_id,
-                            task_id=task_data.task_id,
-                            error=str(e))
+            self.logger.error(f"Task execution failed - agent_id={self.agent_id}, task_id={task_data.task_id}, error={str(e)}")
             
             return error_result
             
@@ -364,19 +352,14 @@ class AgentCapabilityMixin:
         """
         for field in required_fields:
             if field not in task_data.content:
-                self.logger.error(f"Missing required field: {field}",
-                                agent_id=self.agent_id,
-                                task_id=task_data.task_id)
+                self.logger.error(f"Missing required field: {field} - agent_id={self.agent_id}, task_id={task_data.task_id}")
                 return False
         return True
     
     async def log_task_progress(self, task_id: str, stage: str, 
                               details: Dict[str, Any] = None):
         """Log task progress information."""
-        self.logger.info(f"Task progress: {stage}",
-                        agent_id=self.agent_id,
-                        task_id=task_id,
-                        details=details or {})
+        self.logger.info(f"Task progress: {stage} - agent_id={self.agent_id}, task_id={task_id}, details={details or {}}")
     
     def create_result(self, task_id: str, success: bool, 
                      result: Any = None, error: str = None,
