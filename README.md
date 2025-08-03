@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
-[![Development Status](https://img.shields.io/badge/status-development-orange.svg)](https://github.com/yourusername/open-deep-research-strands)
+[![Development Status](https://img.shields.io/badge/status-development-orange.svg)](https://github.com/k-adachi-01/open-deep-research-strands)
 
 A next-generation multi-agent research system that reimplements Open Deep Research using the Strands Agents framework. This project aims to create a production-ready, scalable research platform with advanced agent-to-agent communication, cloud integration, and comprehensive quality control.
 
@@ -56,7 +56,7 @@ graph TD
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/yourusername/open-deep-research-strands.git
+   git clone https://github.com/k-adachi-01/open-deep-research-strands.git
    cd open-deep-research-strands
    ```
 
@@ -228,13 +228,13 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 📞 Support
 
-- **Issues**: [GitHub Issues](https://github.com/yourusername/open-deep-research-strands/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/yourusername/open-deep-research-strands/discussions)
-- **Documentation**: [Wiki](https://github.com/yourusername/open-deep-research-strands/wiki)
+- **Issues**: [GitHub Issues](https://github.com/k-adachi-01/open-deep-research-strands/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/k-adachi-01/open-deep-research-strands/discussions)
+- **Documentation**: [Wiki](https://github.com/k-adachi-01/open-deep-research-strands/wiki)
 
 ## 🌟 Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=yourusername/open-deep-research-strands&type=Date)](https://star-history.com/#yourusername/open-deep-research-strands&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=k-adachi-01/open-deep-research-strands&type=Date)](https://star-history.com/#k-adachi-01/open-deep-research-strands&Date)
 
 ---
 
