@@ -1,0 +1,84 @@
+# Example Local Configuration File
+# Copy this file to local_config.py and update with your settings
+
+LOCAL_CONFIG = {
+    # Runtime Configuration
+    "runtime": "strands_agents_local",
+    "memory_backend": "file_based",
+    "tool_mode": "mock",  # Change to "live" for real API calls
+    "debug_mode": True,
+    "log_level": "DEBUG",
+    
+    # LLM Provider Settings
+    "llm_provider": "openai",  # Options: "openai", "anthropic", "local"
+    "llm_model": "gpt-4",      # Model to use for research agents
+    
+    # API Keys (Set these environment variables or update here)
+    "openai_api_key": "your-openai-api-key-here",
+    "anthropic_api_key": "your-anthropic-api-key-here",
+    
+    # Research Configuration
+    "max_concurrent_agents": 5,
+    "max_research_iterations": 3,
+    "max_tool_calls_per_iteration": 5,
+    "research_timeout_minutes": 10,
+    
+    # Quality Thresholds (0.0 - 1.0)
+    "quality_thresholds": {
+        "completeness": 0.8,
+        "accuracy": 0.85,
+        "depth": 0.75,
+        "source_quality": 0.90,
+        "reasoning_clarity": 0.85
+    },
+    
+    # File Paths
+    "local_memory_path": "./local_memory",
+    "logs_path": "./logs",
+    "cache_path": "./local_memory/cache",
+    
+    # Network Configuration
+    "request_timeout": 30,
+    "max_retries": 3,
+    "rate_limit_requests_per_minute": 100,
+    
+    # Security Settings
+    "enable_input_validation": True,
+    "enable_output_sanitization": True,
+    "enable_audit_logging": True,
+    
+    # Development Settings
+    "enable_mock_tools": True,
+    "enable_debugging": True,
+    "save_intermediate_results": True
+}
+
+# Environment Variable Mappings
+# These environment variables will override the above settings if set
+ENV_VAR_MAPPINGS = {
+    "OPENAI_API_KEY": "openai_api_key",
+    "ANTHROPIC_API_KEY": "anthropic_api_key",
+    "LOG_LEVEL": "log_level",
+    "MAX_CONCURRENT_AGENTS": "max_concurrent_agents",
+    "RESEARCH_TIMEOUT": "research_timeout_minutes"
+}
+
+# Validation Rules
+CONFIG_VALIDATION = {
+    "required_fields": [
+        "runtime",
+        "memory_backend",
+        "llm_provider"
+    ],
+    "valid_llm_providers": [
+        "openai",
+        "anthropic", 
+        "local"
+    ],
+    "valid_log_levels": [
+        "DEBUG",
+        "INFO", 
+        "WARNING",
+        "ERROR"
+    ]
+}
