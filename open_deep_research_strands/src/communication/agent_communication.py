@@ -9,6 +9,63 @@ from .messages import A2AMessage, MessageType, MessageBuilder, MessageValidator
 from .message_router import MessageRouter, get_global_router
 from .local_queue import LocalQueueManager, QueueType, QueueConfiguration, get_global_queue_manager
 from ..config.logging_config import LoggerMixin
+from ..configs.agent_settings import get_agent_settings
+from ..exceptions import AgentCommunicationError, TimeoutError, MessageRoutingError
+
+
+class DeadlockDetector:
+    """Detects and prevents deadlocks in agent communication."""
+    
+    def __init__(self):
+        self.dependency_graph: Dict[str, Set[str]] = {}
+        self.operation_timestamps: Dict[str, datetime] = {}
+        
+    def add_dependency(self, waiter: str, blocker: str) -> None:
+        """Add a dependency between operations."""
+        if waiter not in self.dependency_graph:
+            self.dependency_graph[waiter] = set()
+        self.dependency_graph[waiter].add(blocker)
+        self.operation_timestamps[waiter] = datetime.utcnow()
+    
+    def remove_dependency(self, waiter: str, blocker: str) -> None:
+        """Remove a dependency."""
+        if waiter in self.dependency_graph:
+            self.dependency_graph[waiter].discard(blocker)
+            if not self.dependency_graph[waiter]:
+                del self.dependency_graph[waiter]
+                self.operation_timestamps.pop(waiter, None)
+    
+    def detect_cycle(self) -> Optional[List[str]]:
+        """Detect cycles in the dependency graph."""
+        visited = set()
+        rec_stack = set()
+        
+        def dfs(node: str, path: List[str]) -> Optional[List[str]]:
+            if node in rec_stack:
+                cycle_start = path.index(node)
+                return path[cycle_start:]
+            if node in visited:
+                return None
+            
+            visited.add(node)
+            rec_stack.add(node)
+            path.append(node)
+            
+            for neighbor in self.dependency_graph.get(node, []):
+                cycle = dfs(neighbor, path.copy())
+                if cycle:
+                    return cycle
+            
+            rec_stack.remove(node)
+            return None
+        
+        for node in self.dependency_graph:
+            if node not in visited:
+                cycle = dfs(node, [])
+                if cycle:
+                    return cycle
+        
+        return None
 
 
 class AgentCommunicationHub(LoggerMixin):
@@ -23,6 +80,10 @@ class AgentCommunicationHub(LoggerMixin):
         """Initialize communication hub."""
         self.hub_id = hub_id or f"comm_hub_{id(self)}"
         
+        # Load settings
+        self.settings = get_agent_settings()
+        self.timeout_settings = self.settings.get_timeouts()
+        
         # Core components
         self.router = get_global_router()
         self.queue_manager = get_global_queue_manager()
@@ -35,12 +96,19 @@ class AgentCommunicationHub(LoggerMixin):
         # Communication patterns
         self.message_builders: Dict[str, MessageBuilder] = {}
         
+        # Async operation management
+        self.active_operations: Set[str] = set()
+        self.operation_locks: Dict[str, asyncio.Lock] = {}
+        self.deadlock_detector = DeadlockDetector()
+        
         # Statistics
         self.stats = {
             "agents_registered": 0,
             "messages_sent": 0,
             "messages_delivered": 0,
-            "communication_errors": 0
+            "communication_errors": 0,
+            "timeouts": 0,
+            "deadlocks_prevented": 0
         }
         
         # State

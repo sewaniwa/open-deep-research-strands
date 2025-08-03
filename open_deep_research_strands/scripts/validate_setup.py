@@ -138,8 +138,7 @@ def test_basic_functionality():
     print("🔧 Testing basic configuration access...")
     
     try:
-        # Add project to Python path
-        sys.path.insert(0, str(project_root))
+        # Project path for configuration access
         
         # Test configuration constants (without importing the modules)
         config_file = project_root / "configs/local_config.py"

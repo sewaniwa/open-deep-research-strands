@@ -7,6 +7,7 @@ from datetime import datetime
 
 from .base_agent import BaseResearchAgent, TaskData, AgentResult, AgentCapabilityMixin
 from ..tools.llm_interface import create_message
+from ..configs.agent_settings import get_agent_settings
 
 
 class SupervisorAgent(BaseResearchAgent, AgentCapabilityMixin):
@@ -39,17 +40,15 @@ class SupervisorAgent(BaseResearchAgent, AgentCapabilityMixin):
         self.research_session_state = {}
         self.active_sub_agents = {}
         
-        # Quality control
-        self.quality_thresholds = {
-            "accuracy": 0.85,
-            "depth": 0.80,
-            "completeness": 0.80,
-            "source_quality": 0.90
-        }
+        # Quality control - load from settings
+        self.agent_settings = get_agent_settings()
+        self.quality_thresholds = self.agent_settings.get_quality_thresholds()
         
-        # Resource management
-        self.max_concurrent_agents = 5
-        self.agent_timeout = 300  # 5 minutes
+        # Resource management - load from settings
+        concurrency_settings = self.agent_settings.get_concurrency_settings()
+        timeout_settings = self.agent_settings.get_timeouts()
+        self.max_concurrent_agents = concurrency_settings.get("max_sub_agents", 5)
+        self.agent_timeout = timeout_settings.get("task_execution", 300)
     
     async def execute_task(self, task_data: TaskData) -> AgentResult:
         """

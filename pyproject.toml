@@ -49,7 +49,7 @@ bedrock = [
 ]
 
 [tool.setuptools.packages.find]
-where = ["src"]
+where = ["open_deep_research_strands"]
 
 [tool.black]
 line-length = 88

@@ -8,6 +8,7 @@ structlog
 httpx
 openai
 anthropic
+cryptography
 
 # Development dependencies
 pytest>=7.0.0

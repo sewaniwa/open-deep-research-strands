@@ -5,12 +5,16 @@ import asyncio
 import uuid
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import Dict, Any, List, Optional, Union
+from typing import Dict, Any, List, Optional, Union, Literal
 from dataclasses import dataclass
 
 from ..config.logging_config import LoggerMixin
 from ..config.strands_config import get_sdk_manager
 from ..tools.llm_interface import LLMManager, LLMMessage, create_message
+from ..exceptions import (
+    AgentError, AgentInitializationError, AgentTaskError, 
+    AgentCommunicationError, SDKError, LLMError
+)
 
 
 @dataclass
@@ -19,7 +23,7 @@ class TaskData:
     task_id: str
     task_type: str
     content: Dict[str, Any]
-    priority: str = "normal"
+    priority: Literal["low", "normal", "high", "urgent"] = "normal"
     metadata: Optional[Dict[str, Any]] = None
     created_at: Optional[str] = None
     
@@ -113,25 +117,37 @@ class BaseResearchAgent(ABC, LoggerMixin):
             
         Returns:
             True if initialization successful
+            
+        Raises:
+            AgentInitializationError: If initialization fails
+            SDKError: If SDK operations fail
+            LLMError: If LLM manager initialization fails
         """
         try:
             # Ensure SDK is initialized
             if not self.sdk_manager.is_initialized():
-                await self.sdk_manager.initialize_sdk()
+                try:
+                    await self.sdk_manager.initialize_sdk()
+                except Exception as e:
+                    raise SDKError(f"Failed to initialize SDK: {str(e)}")
             
             # Get SDK components
-            self.runtime = self.sdk_manager.get_runtime()
-            self.memory_system = self.sdk_manager.get_memory_system()
+            try:
+                self.runtime = self.sdk_manager.get_runtime()
+                self.memory_system = self.sdk_manager.get_memory_system()
+            except Exception as e:
+                raise SDKError(f"Failed to get SDK components: {str(e)}")
             
             # Initialize LLM manager
-            import sys
-            from pathlib import Path
-            # Add project root to Python path
-            project_root = Path(__file__).parent.parent.parent
-            sys.path.insert(0, str(project_root))
-            from configs.local_config import get_config
-            config = get_config()
-            self.llm_manager = LLMManager(config)
+            try:
+                from pathlib import Path
+                # Get project root for config access
+                project_root = Path(__file__).parent.parent.parent
+                from open_deep_research_strands.configs.local_config import get_config
+                config = get_config()
+                self.llm_manager = LLMManager(config)
+            except Exception as e:
+                raise LLMError(f"Failed to initialize LLM manager: {str(e)}")
             
             # Create agent session
             if session_id:

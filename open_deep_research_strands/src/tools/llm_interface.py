@@ -3,17 +3,19 @@ LLM interface for interacting with different language model providers.
 """
 import os
 import asyncio
-from typing import Dict, List, Any, Optional, Union
+from typing import Dict, List, Any, Optional, Union, Literal
 from dataclasses import dataclass
 from abc import ABC, abstractmethod
 
 from ..config.logging_config import LoggerMixin
+from ..config.secrets_manager import get_api_key
+from ..exceptions import LLMError, LLMAuthenticationError, LLMProviderError
 
 
 @dataclass
 class LLMMessage:
     """Represents a message in LLM conversation."""
-    role: str  # "system", "user", "assistant"
+    role: Literal["system", "user", "assistant"]
     content: str
     metadata: Optional[Dict[str, Any]] = None
     
@@ -85,16 +87,25 @@ class OpenAIProvider(LLMProvider):
     def __init__(self, config: Dict[str, Any]):
         """Initialize OpenAI provider."""
         super().__init__(config)
-        self.api_key = os.getenv(config.get("api_key_env", "OPENAI_API_KEY"))
+        
+        # Get API key securely
+        self.api_key = get_api_key("openai", config.get("api_key_env", "OPENAI_API_KEY"))
+        
+        if not self.api_key:
+            raise LLMAuthenticationError(
+                "OpenAI API key not found. Please set using secrets manager or environment variable.",
+                {"provider": "openai", "required_env": "OPENAI_API_KEY"}
+            )
+        
         self.model = config.get("model", "gpt-4")
         self.max_tokens = config.get("max_tokens", 4000)
         self.temperature = config.get("temperature", 0.1)
         
         # For development, we'll use a mock implementation
-        self._mock_mode = not self.api_key
+        self._mock_mode = config.get("mock_mode", False)
         
         if self._mock_mode:
-            self.logger.warning("OpenAI API key not found, using mock mode")
+            self.logger.warning("OpenAI provider running in mock mode")
     
     async def generate(self, messages: List[LLMMessage], **kwargs) -> LLMResponse:
         """Generate response using OpenAI API."""

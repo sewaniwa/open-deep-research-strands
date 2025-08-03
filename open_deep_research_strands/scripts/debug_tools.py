@@ -9,16 +9,15 @@ from pathlib import Path
 from datetime import datetime
 import json
 
-# Add project root to Python path
+# Project root for relative operations
 project_root = Path(__file__).parent.parent
-sys.path.insert(0, str(project_root))
 
-from src.config.strands_config import initialize_strands_sdk, get_sdk_manager
-from src.agents.supervisor_agent import SupervisorAgent
-from src.agents.research_sub_agent import ResearchSubAgent
-from src.agents.scoping_agent import ScopingAgent
-from src.communication.agent_communication import initialize_global_communication
-from src.tools.mock_tools import MockWebSearchTool, MockMCPServer
+from open_deep_research_strands.src.config.strands_config import initialize_strands_sdk, get_sdk_manager
+from open_deep_research_strands.src.agents.supervisor_agent import SupervisorAgent
+from open_deep_research_strands.src.agents.research_sub_agent import ResearchSubAgent
+from open_deep_research_strands.src.agents.scoping_agent import ScopingAgent
+from open_deep_research_strands.src.communication.agent_communication import initialize_global_communication
+from open_deep_research_strands.src.tools.mock_tools import MockWebSearchTool, MockMCPServer
 
 
 class DebugSession:
