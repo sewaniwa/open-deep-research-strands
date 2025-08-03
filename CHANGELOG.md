@@ -120,6 +120,6 @@ As this is an initial implementation, breaking changes will be documented here a
 ## Support
 
 For questions about changes or versions:
-- Check the [GitHub Issues](https://github.com/yourusername/open-deep-research-strands/issues)
-- Read the [Documentation](https://github.com/yourusername/open-deep-research-strands/wiki)
-- Join [Discussions](https://github.com/yourusername/open-deep-research-strands/discussions)
+- Check the [GitHub Issues](https://github.com/k-adachi-01/open-deep-research-strands/issues)
+- Read the [Documentation](https://github.com/k-adachi-01/open-deep-research-strands/wiki)
+- Join [Discussions](https://github.com/k-adachi-01/open-deep-research-strands/discussions)

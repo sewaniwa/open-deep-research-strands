@@ -51,8 +51,8 @@ This project and everyone participating in it is governed by our Code of Conduct
 
 1. **Fork and Clone**
    ```bash
-   git fork https://github.com/yourusername/open-deep-research-strands.git
-   git clone https://github.com/yourusername/open-deep-research-strands.git
+   git fork https://github.com/k-adachi-01/open-deep-research-strands.git
+   git clone https://github.com/k-adachi-01/open-deep-research-strands.git
    cd open-deep-research-strands
    ```
 
