@@ -111,3 +111,8 @@ class ToolAuthenticationError(ToolError):
 class ValidationError(OpenDeepResearchError):
     """Raised when data validation fails."""
     pass
+
+
+class AgentValidationError(AgentError):
+    """Raised when agent input validation fails."""
+    pass

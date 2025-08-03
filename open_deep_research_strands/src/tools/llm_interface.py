@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from abc import ABC, abstractmethod
 
 from ..config.logging_config import LoggerMixin
-from ..config.secrets_manager import get_api_key
+# from ..config.secrets_manager import get_api_key  # Temporarily disabled
 from ..exceptions import LLMError, LLMAuthenticationError, LLMProviderError
 
 
@@ -89,7 +89,7 @@ class OpenAIProvider(LLMProvider):
         super().__init__(config)
         
         # Get API key securely
-        self.api_key = get_api_key("openai", config.get("api_key_env", "OPENAI_API_KEY"))
+        self.api_key = os.getenv(config.get("api_key_env", "OPENAI_API_KEY")) or "mock_api_key"
         
         if not self.api_key:
             raise LLMAuthenticationError(

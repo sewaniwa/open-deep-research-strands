@@ -110,10 +110,24 @@ class MessageRouter(LoggerMixin):
             "routes_registered": 0
         }
         
-        # Configuration
+        # Configuration with fallback
+        try:
+            from configs.agent_settings import get_agent_settings
+            settings = get_agent_settings()
+            communication_settings = settings.get_communication_settings()
+            
+            self.retry_delay = communication_settings.get("retry_delay", 5.0)
+            self.dead_letter_ttl = communication_settings.get("dead_letter_ttl", 3600)
+            self.error_backoff = communication_settings.get("error_backoff", 1.0)
+            self.dequeue_timeout = communication_settings.get("dequeue_timeout", 0.1)
+        except ImportError:
+            # Fallback configuration
+            self.retry_delay = 5.0  # seconds
+            self.dead_letter_ttl = 3600  # 1 hour
+            self.error_backoff = 1.0  # seconds
+            self.dequeue_timeout = 0.1  # seconds
+        
         self.max_queue_size = 10000
-        self.retry_delay = 5.0  # seconds
-        self.dead_letter_ttl = 3600  # 1 hour
         
         # Processing control
         self.is_running = False
@@ -252,14 +266,14 @@ class MessageRouter(LoggerMixin):
                 # Cleanup expired messages
                 await self._cleanup_expired_messages()
                 
-                # Wait before next iteration
-                await asyncio.sleep(0.1)
+                # Wait before next iteration  
+                await asyncio.sleep(self.dequeue_timeout)
                 
             except asyncio.CancelledError:
                 break
             except Exception as e:
                 self.logger.error("Error in processing loop", error=str(e))
-                await asyncio.sleep(1.0)  # Back off on error
+                await asyncio.sleep(self.error_backoff)  # Back off on error
     
     async def _process_pending_messages(self):
         """Process messages in pending queue."""

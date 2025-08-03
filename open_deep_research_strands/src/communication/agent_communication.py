@@ -9,7 +9,7 @@ from .messages import A2AMessage, MessageType, MessageBuilder, MessageValidator
 from .message_router import MessageRouter, get_global_router
 from .local_queue import LocalQueueManager, QueueType, QueueConfiguration, get_global_queue_manager
 from ..config.logging_config import LoggerMixin
-from ..configs.agent_settings import get_agent_settings
+from ...configs.agent_settings import get_agent_settings
 from ..exceptions import AgentCommunicationError, TimeoutError, MessageRoutingError
 
 
@@ -83,6 +83,7 @@ class AgentCommunicationHub(LoggerMixin):
         # Load settings
         self.settings = get_agent_settings()
         self.timeout_settings = self.settings.get_timeouts()
+        self.communication_settings = self.settings.get_communication_settings()
         
         # Core components
         self.router = get_global_router()
@@ -551,7 +552,7 @@ class AgentCommunicationHub(LoggerMixin):
         
         messages = []
         for _ in range(count):
-            message = await queue.dequeue(timeout=0.1)
+            message = await queue.dequeue(timeout=self.communication_settings.get("dequeue_timeout", 0.1))
             if message is None:
                 break
             messages.append(message)
@@ -589,7 +590,7 @@ class AgentCommunicationHub(LoggerMixin):
             if queue:
                 # Process any remaining messages in queue
                 while not queue.is_empty():
-                    message = await queue.dequeue(timeout=0.1)
+                    message = await queue.dequeue(timeout=self.communication_settings.get("dequeue_timeout", 0.1))
                     if message is None:
                         break
 
