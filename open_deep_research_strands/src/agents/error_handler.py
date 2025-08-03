@@ -610,3 +610,159 @@ class ResearchErrorHandler:
             "current_error_rate": len(self.error_rate_window),
             "error_rate_limit": self.max_error_rate
         }
+    
+    async def execute_recovery(self, exception: Exception, context: Dict[str, Any], 
+                             task_id: str) -> Dict[str, Any]:
+        """
+        Execute error recovery strategies for a given exception.
+        
+        Args:
+            exception: The exception that occurred
+            context: Context information about the error
+            task_id: ID of the task that encountered the error
+            
+        Returns:
+            Recovery result with success status and details
+        """
+        recovery_start_time = datetime.utcnow()
+        
+        try:
+            # Classify the error to determine appropriate recovery strategies
+            error_category = self._classify_error(exception, context)
+            
+            # Get recovery strategies for this error category
+            recovery_strategies = self.recovery_strategies.get(error_category, [])
+            
+            if not recovery_strategies:
+                return {
+                    "recovery_attempted": True,
+                    "success": False,
+                    "error": "No recovery strategies available for this error category",
+                    "error_category": error_category.value,
+                    "task_id": task_id
+                }
+            
+            # Log recovery attempt start
+            await self.supervisor.log_task_progress(
+                context.get("session_id", "unknown"),
+                "error_recovery_started",
+                {
+                    "error_type": str(type(exception).__name__),
+                    "error_message": str(exception),
+                    "error_category": error_category.value,
+                    "available_strategies": len(recovery_strategies),
+                    "task_id": task_id
+                }
+            )
+            
+            # Attempt recovery strategies in order
+            for strategy_index, strategy in enumerate(recovery_strategies):
+                try:
+                    # Log strategy attempt
+                    await self.supervisor.log_task_progress(
+                        context.get("session_id", "unknown"),
+                        "recovery_strategy_attempt",
+                        {
+                            "strategy_name": strategy.name,
+                            "strategy_index": strategy_index,
+                            "max_retries": strategy.max_retries,
+                            "task_id": task_id
+                        }
+                    )
+                    
+                    # Execute the recovery strategy
+                    strategy_result = await strategy.execute_func(exception, context)
+                    
+                    # Check if recovery was successful
+                    if strategy_result and strategy_result.get("success", False):
+                        execution_time = (datetime.utcnow() - recovery_start_time).total_seconds()
+                        
+                        # Log successful recovery
+                        await self.supervisor.log_task_progress(
+                            context.get("session_id", "unknown"),
+                            "error_recovery_success",
+                            {
+                                "strategy_used": strategy.name,
+                                "execution_time": execution_time,
+                                "task_id": task_id
+                            }
+                        )
+                        
+                        # Update error record as resolved
+                        self._mark_error_resolved(exception, strategy.name)
+                        
+                        return {
+                            "recovery_attempted": True,
+                            "success": True,
+                            "strategy_used": strategy.name,
+                            "strategy_result": strategy_result,
+                            "execution_time": execution_time,
+                            "task_id": task_id
+                        }
+                    
+                except Exception as strategy_error:
+                    # Log strategy failure
+                    await self.supervisor.log_task_progress(
+                        context.get("session_id", "unknown"),
+                        "recovery_strategy_failed",
+                        {
+                            "strategy_name": strategy.name,
+                            "strategy_error": str(strategy_error),
+                            "task_id": task_id
+                        }
+                    )
+                    
+                    # Continue to next strategy
+                    continue
+            
+            # All strategies failed
+            execution_time = (datetime.utcnow() - recovery_start_time).total_seconds()
+            
+            await self.supervisor.log_task_progress(
+                context.get("session_id", "unknown"),
+                "error_recovery_failed",
+                {
+                    "strategies_attempted": len(recovery_strategies),
+                    "execution_time": execution_time,
+                    "task_id": task_id
+                }
+            )
+            
+            return {
+                "recovery_attempted": True,
+                "success": False,
+                "error": "All recovery strategies failed",
+                "strategies_attempted": len(recovery_strategies),
+                "execution_time": execution_time,
+                "task_id": task_id
+            }
+            
+        except Exception as recovery_error:
+            # Recovery system itself failed
+            execution_time = (datetime.utcnow() - recovery_start_time).total_seconds()
+            
+            return {
+                "recovery_attempted": True,
+                "success": False,
+                "error": f"Recovery system failure: {str(recovery_error)}",
+                "execution_time": execution_time,
+                "task_id": task_id
+            }
+    
+    def _mark_error_resolved(self, exception: Exception, resolution_method: str):
+        """
+        Mark an error as resolved in the error history.
+        
+        Args:
+            exception: The resolved exception
+            resolution_method: Method used to resolve the error
+        """
+        exception_str = str(exception)
+        
+        # Find and update the error record
+        for error_record in reversed(self.error_history):  # Start from most recent
+            if str(error_record.exception) == exception_str:
+                error_record.resolved = True
+                error_record.resolution_method = resolution_method
+                error_record.resolved_at = datetime.utcnow()
+                break

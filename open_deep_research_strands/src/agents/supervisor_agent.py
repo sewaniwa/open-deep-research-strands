@@ -305,10 +305,32 @@ class SupervisorAgent(BaseResearchAgent, AgentCapabilityMixin):
         
         return session_state
     
+    async def start_research_session(self, user_query: str, 
+                                   parameters: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """
+        Start a new research session.
+        
+        Args:
+            user_query: User's research query
+            parameters: Optional session parameters
+            
+        Returns:
+            Session state dictionary
+        """
+        session_id = self._generate_session_id()
+        session_state = await self.initialize_research_session(session_id, user_query, parameters)
+        session_state["is_active"] = True
+        return session_state
+    
+    def _generate_session_id(self) -> str:
+        """Generate a unique session ID."""
+        import uuid
+        return f"session_{uuid.uuid4().hex[:8]}"
+    
     async def execute_scoping_phase(self, user_query: str, 
                                   session_state: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Execute the scoping phase to clarify research requirements.
+        Execute the scoping phase using dedicated ScopingAgent.
         
         Args:
             user_query: User's research query
@@ -317,9 +339,83 @@ class SupervisorAgent(BaseResearchAgent, AgentCapabilityMixin):
         Returns:
             Research brief with clarified requirements
         """
-        # For Phase 1, we'll implement a basic scoping without sub-agents
-        # This will be enhanced in later phases when ScopingAgent is implemented
+        try:
+            # Import and initialize ScopingAgent
+            from .scoping_agent import ScopingAgent
+            
+            scoping_agent = ScopingAgent()
+            await scoping_agent.initialize()
+            
+            # Create task for scoping agent
+            from .base_agent import TaskData
+            
+            scoping_task = TaskData(
+                task_id=f"scoping_{session_state.get('session_id', 'unknown')}",
+                agent_id=scoping_agent.agent_id,
+                task_type="requirement_clarification",
+                content={
+                    "initial_query": user_query,
+                    # No user_callback for now - using AI-only analysis mode
+                },
+                priority="high",
+                metadata={
+                    "session_id": session_state.get("session_id"),
+                    "phase": "scoping"
+                }
+            )
+            
+            # Execute scoping task
+            scoping_result = await scoping_agent.execute_task(scoping_task)
+            
+            if scoping_result.success:
+                research_brief = scoping_result.result
+                
+                # Enhance with session metadata
+                research_brief.update({
+                    "session_id": session_state.get("session_id"),
+                    "scoping_agent_id": scoping_agent.agent_id,
+                    "scoping_completed_at": datetime.utcnow().isoformat()
+                })
+                
+                await self.log_task_progress(
+                    session_state.get("session_id", "unknown"),
+                    "scoping_agent_success",
+                    {
+                        "confidence_score": scoping_result.metadata.get("confidence_score", 0.0),
+                        "subtopics_identified": len(research_brief.get("required_topics", [])),
+                        "interactive_mode": scoping_result.metadata.get("interactive_mode", False)
+                    }
+                )
+                
+                return research_brief
+            else:
+                # Fallback to basic scoping if ScopingAgent fails
+                await self.log_task_progress(
+                    session_state.get("session_id", "unknown"),
+                    "scoping_agent_failed_fallback",
+                    {"error": scoping_result.error}
+                )
+                return await self._execute_basic_scoping_fallback(user_query)
+                
+        except Exception as e:
+            # Fallback to basic scoping if ScopingAgent import/initialization fails
+            await self.log_task_progress(
+                session_state.get("session_id", "unknown"),
+                "scoping_agent_unavailable_fallback",
+                {"error": str(e)}
+            )
+            return await self._execute_basic_scoping_fallback(user_query)
+    
+    async def _execute_basic_scoping_fallback(self, user_query: str) -> Dict[str, Any]:
+        """
+        Execute basic scoping as fallback when ScopingAgent is unavailable.
         
+        Args:
+            user_query: User's research query
+            
+        Returns:
+            Basic research brief
+        """
         messages = [
             create_message("system", 
                           "You are a research scoping specialist. Your job is to analyze "
@@ -333,7 +429,7 @@ class SupervisorAgent(BaseResearchAgent, AgentCapabilityMixin):
             "query": user_query
         })
         
-        # Extract key components (simplified for Phase 1)
+        # Extract key components (basic implementation)
         research_brief = {
             "original_query": user_query,
             "research_objective": f"Comprehensive research on: {user_query}",
@@ -350,6 +446,7 @@ class SupervisorAgent(BaseResearchAgent, AgentCapabilityMixin):
                 "Well-structured presentation"
             ],
             "estimated_complexity": "medium",
+            "scoping_method": "basic_fallback",
             "scoping_completed_at": datetime.utcnow().isoformat()
         }
         
@@ -571,7 +668,7 @@ class SupervisorAgent(BaseResearchAgent, AgentCapabilityMixin):
                                  research_brief: Dict[str, Any],
                                  session_state: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Execute the report generation phase.
+        Execute the report generation phase using dedicated ReportAgent.
         
         Args:
             research_results: Results from research phase
@@ -580,6 +677,106 @@ class SupervisorAgent(BaseResearchAgent, AgentCapabilityMixin):
             
         Returns:
             Final research report
+        """
+        try:
+            # Import and initialize ReportAgent
+            from .report_agent import ReportAgent
+            
+            report_agent = ReportAgent()
+            await report_agent.initialize()
+            
+            # Create task for report agent
+            from .base_agent import TaskData
+            
+            # Prepare report configuration
+            report_config = session_state.get("report_config", {
+                "formats": ["markdown", "json"],
+                "sections": [
+                    "executive_summary",
+                    "introduction", 
+                    "methodology",
+                    "findings",
+                    "analysis",
+                    "conclusions",
+                    "recommendations",
+                    "references"
+                ]
+            })
+            
+            report_task = TaskData(
+                task_id=f"report_{session_state.get('session_id', 'unknown')}",
+                agent_id=report_agent.agent_id,
+                task_type="report_generation",
+                content={
+                    "research_results": research_results,
+                    "research_brief": research_brief,
+                    "report_config": report_config
+                },
+                priority="high",
+                metadata={
+                    "session_id": session_state.get("session_id"),
+                    "phase": "report"
+                }
+            )
+            
+            # Execute report generation task
+            report_result = await report_agent.execute_task(report_task)
+            
+            if report_result.success:
+                final_report = report_result.result
+                
+                # Enhance with session metadata
+                final_report.update({
+                    "session_id": session_state.get("session_id"),
+                    "report_agent_id": report_agent.agent_id,
+                    "report_completed_at": datetime.utcnow().isoformat()
+                })
+                
+                await self.log_task_progress(
+                    session_state.get("session_id", "unknown"),
+                    "report_agent_success",
+                    {
+                        "quality_score": report_result.metadata.get("quality_score", 0.0),
+                        "total_sections": final_report.get("metadata", {}).get("total_sections", 0),
+                        "word_count": final_report.get("metadata", {}).get("total_word_count", 0),
+                        "formats_generated": len(final_report.get("formatted_reports", {}))
+                    }
+                )
+                
+                return final_report
+            else:
+                # Fallback to basic report generation if ReportAgent fails
+                await self.log_task_progress(
+                    session_state.get("session_id", "unknown"),
+                    "report_agent_failed_fallback",
+                    {"error": report_result.error}
+                )
+                return await self._execute_basic_report_fallback(
+                    research_results, research_brief
+                )
+                
+        except Exception as e:
+            # Fallback to basic report generation if ReportAgent import/initialization fails
+            await self.log_task_progress(
+                session_state.get("session_id", "unknown"),
+                "report_agent_unavailable_fallback",
+                {"error": str(e)}
+            )
+            return await self._execute_basic_report_fallback(
+                research_results, research_brief
+            )
+    
+    async def _execute_basic_report_fallback(self, research_results: Dict[str, Any],
+                                           research_brief: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Execute basic report generation as fallback when ReportAgent is unavailable.
+        
+        Args:
+            research_results: Results from research phase
+            research_brief: Research brief from scoping phase
+            
+        Returns:
+            Basic research report
         """
         # Compile all findings
         subtopic_results = research_results.get("subtopic_results", {})
@@ -624,6 +821,7 @@ class SupervisorAgent(BaseResearchAgent, AgentCapabilityMixin):
                 "Consider practical implementation of key findings",
                 "Regular updates recommended as field evolves"
             ],
+            "report_method": "basic_fallback",
             "generated_at": datetime.utcnow().isoformat(),
             "total_sources": sum(
                 len(result.get("sources", [])) 
@@ -840,3 +1038,165 @@ class SupervisorAgent(BaseResearchAgent, AgentCapabilityMixin):
                 "recovery_strategies": len(self.error_handler.recovery_strategies)
             }
         }
+    
+    async def conduct_research(self, user_query: str, 
+                             parameters: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """
+        Execute complete end-to-end research workflow.
+        
+        This method orchestrates the entire research process through three phases:
+        1. Scoping: Clarify research requirements and generate research brief
+        2. Research: Execute parallel research across identified subtopics
+        3. Report: Integrate results and generate comprehensive report
+        
+        Args:
+            user_query: User's research query
+            parameters: Optional research parameters and configuration
+            
+        Returns:
+            Complete research report with metadata
+        """
+        start_time = datetime.utcnow()
+        
+        try:
+            # Phase 1: Initialize research session
+            session_state = await self.start_research_session(user_query, parameters)
+            session_id = session_state["session_id"]
+            
+            await self.log_task_progress(
+                session_id,
+                "end_to_end_research_started",
+                {"query": user_query, "parameters": parameters or {}}
+            )
+            
+            # Phase 2: Execute scoping phase
+            self.current_phase = "scoping"
+            research_brief = await self.execute_scoping_phase(user_query, session_state)
+            
+            await self.log_task_progress(
+                session_id,
+                "scoping_phase_completed",
+                {
+                    "subtopics_identified": len(research_brief.get("required_topics", [])),
+                    "research_objective": research_brief.get("research_objective", "")
+                }
+            )
+            
+            # Phase 3: Execute research phase
+            self.current_phase = "research"
+            research_results = await self.execute_research_phase(research_brief, session_state)
+            
+            await self.log_task_progress(
+                session_id,
+                "research_phase_completed",
+                {
+                    "subtopics_researched": len(research_results.get("subtopic_results", {})),
+                    "quality_score": research_results.get("quality_assessment", {}).get("overall_score", 0.0)
+                }
+            )
+            
+            # Phase 4: Execute report generation phase
+            self.current_phase = "report"
+            final_report = await self.execute_report_phase(research_results, research_brief, session_state)
+            
+            # Add workflow metadata
+            end_time = datetime.utcnow()
+            execution_time = (end_time - start_time).total_seconds()
+            
+            final_report.update({
+                "workflow_metadata": {
+                    "session_id": session_id,
+                    "execution_time_seconds": execution_time,
+                    "phases_completed": ["scoping", "research", "report"],
+                    "started_at": start_time.isoformat(),
+                    "completed_at": end_time.isoformat(),
+                    "supervisor_agent_id": self.agent_id
+                },
+                "research_session_summary": {
+                    "original_query": user_query,
+                    "parameters": parameters or {},
+                    "session_state": session_state
+                }
+            })
+            
+            await self.log_task_progress(
+                session_id,
+                "end_to_end_research_completed",
+                {
+                    "execution_time": execution_time,
+                    "final_quality_score": final_report.get("quality_check", {}).get("quality_score", 0.0),
+                    "report_sections": len(final_report.get("report_content", {}).get("sections", {})),
+                    "total_sources": final_report.get("metadata", {}).get("total_sources", 0)
+                }
+            )
+            
+            # Reset phase
+            self.current_phase = "idle"
+            
+            return final_report
+            
+        except Exception as e:
+            # Handle workflow errors
+            await self.log_task_progress(
+                session_state.get("session_id", "unknown") if 'session_state' in locals() else "unknown",
+                "end_to_end_research_failed",
+                {"error": str(e), "phase": self.current_phase}
+            )
+            
+            # Attempt error recovery
+            if hasattr(self, 'error_handler') and self.error_handler:
+                recovery_result = await self._attempt_workflow_recovery(e, user_query, parameters)
+                if recovery_result.get("success", False):
+                    return recovery_result["result"]
+            
+            # Reset phase and re-raise if recovery failed
+            self.current_phase = "idle"
+            raise
+    
+    async def _attempt_workflow_recovery(self, exception: Exception, user_query: str, 
+                                       parameters: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        Attempt to recover from workflow failure.
+        
+        Args:
+            exception: The exception that caused the failure
+            user_query: Original research query
+            parameters: Original parameters
+            
+        Returns:
+            Recovery result with success status
+        """
+        try:
+            # Classify the error
+            error_category = self.error_handler._classify_error(exception, {
+                "phase": self.current_phase,
+                "query": user_query
+            })
+            
+            # Get recovery strategies for this error type
+            recovery_strategies = self.error_handler.recovery_strategies.get(error_category, [])
+            
+            if not recovery_strategies:
+                return {"success": False, "error": "No recovery strategies available"}
+            
+            # Try basic recovery: restart with simplified parameters
+            simplified_params = {
+                **(parameters or {}),
+                "fallback_mode": True,
+                "simplified_research": True
+            }
+            
+            # Retry the workflow with simplified parameters
+            recovery_result = await self.conduct_research(user_query, simplified_params)
+            
+            return {
+                "success": True,
+                "result": recovery_result,
+                "recovery_method": "simplified_retry"
+            }
+            
+        except Exception as recovery_error:
+            return {
+                "success": False,
+                "error": f"Recovery failed: {str(recovery_error)}"
+            }
