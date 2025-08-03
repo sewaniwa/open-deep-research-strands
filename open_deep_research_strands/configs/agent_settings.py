@@ -47,6 +47,25 @@ class AgentSettings:
             "memory_settings": {
                 "max_memory_entries": int(os.getenv("AGENT_MAX_MEMORY", "1000")),
                 "memory_cleanup_threshold": float(os.getenv("AGENT_MEMORY_CLEANUP", "0.8"))
+            },
+            "swarm_settings": {
+                "task_timeout": int(os.getenv("SWARM_TASK_TIMEOUT", "300")),
+                "effort_multipliers": {
+                    "low": float(os.getenv("SWARM_EFFORT_LOW", "1.0")),
+                    "medium": float(os.getenv("SWARM_EFFORT_MEDIUM", "2.0")),
+                    "high": float(os.getenv("SWARM_EFFORT_HIGH", "3.0"))
+                },
+                "confidence_thresholds": {
+                    "high_relevance": float(os.getenv("SWARM_CONFIDENCE_HIGH", "0.9")),
+                    "medium_relevance": float(os.getenv("SWARM_CONFIDENCE_MEDIUM", "0.85")),
+                    "default_confidence": float(os.getenv("SWARM_CONFIDENCE_DEFAULT", "0.85"))
+                }
+            },
+            "communication_settings": {
+                "retry_delay": float(os.getenv("COMM_RETRY_DELAY", "5.0")),
+                "dead_letter_ttl": int(os.getenv("COMM_DEAD_LETTER_TTL", "3600")),
+                "dequeue_timeout": float(os.getenv("COMM_DEQUEUE_TIMEOUT", "0.1")),
+                "error_backoff": float(os.getenv("COMM_ERROR_BACKOFF", "1.0"))
             }
         }
     
@@ -107,6 +126,14 @@ class AgentSettings:
         """Get memory settings."""
         return self.get("memory_settings", {})
     
+    def get_swarm_settings(self) -> Dict[str, Any]:
+        """Get swarm controller settings."""
+        return self.get("swarm_settings", {})
+    
+    def get_communication_settings(self) -> Dict[str, Any]:
+        """Get communication settings."""
+        return self.get("communication_settings", {})
+    
     def validate(self) -> bool:
         """
         Validate configuration settings.
@@ -139,6 +166,33 @@ class AgentSettings:
             if value <= 0:
                 raise ConfigurationError(
                     f"Concurrency setting '{key}' must be positive, got {value}"
+                )
+        
+        # Validate swarm settings
+        swarm = self.get_swarm_settings()
+        if swarm.get("task_timeout", 0) <= 0:
+            raise ConfigurationError("Swarm task_timeout must be positive")
+        
+        effort_multipliers = swarm.get("effort_multipliers", {})
+        for level, multiplier in effort_multipliers.items():
+            if multiplier <= 0:
+                raise ConfigurationError(
+                    f"Effort multiplier '{level}' must be positive, got {multiplier}"
+                )
+        
+        confidence_thresholds = swarm.get("confidence_thresholds", {})
+        for threshold_name, value in confidence_thresholds.items():
+            if not 0.0 <= value <= 1.0:
+                raise ConfigurationError(
+                    f"Confidence threshold '{threshold_name}' must be between 0.0 and 1.0, got {value}"
+                )
+        
+        # Validate communication settings
+        communication = self.get_communication_settings()
+        for key, value in communication.items():
+            if value <= 0:
+                raise ConfigurationError(
+                    f"Communication setting '{key}' must be positive, got {value}"
                 )
         
         return True

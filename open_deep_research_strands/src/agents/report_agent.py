@@ -9,6 +9,8 @@ import json
 
 from .base_agent import BaseResearchAgent, TaskData, AgentResult, AgentCapabilityMixin
 from ..tools.llm_interface import create_message
+from ..config.validation_schemas import validate_report_request
+from ..exceptions import AgentValidationError
 
 
 class ReportFormat(Enum):
@@ -122,12 +124,20 @@ class ReportAgent(BaseResearchAgent, AgentCapabilityMixin):
         Returns:
             Generated report in requested format
         """
-        required_fields = ["research_results", "research_brief"]
-        if not await self.validate_task_data(task_data, required_fields):
+        # Enhanced validation using schema
+        validation_data = {
+            "research_results": task_data.content.get("research_results", {}),
+            "research_brief": task_data.content.get("research_brief", {}),
+            "output_format": task_data.content.get("output_format", "markdown"),
+            "quality_requirements": task_data.content.get("quality_requirements", {})
+        }
+        
+        validation_result = validate_report_request(validation_data)
+        if not validation_result.is_valid:
             return self.create_result(
                 task_data.task_id,
                 False,
-                error="Missing required fields: research_results, research_brief"
+                error=f"Report request validation failed: {'; '.join(validation_result.errors)}"
             )
         
         research_results = task_data.content["research_results"]

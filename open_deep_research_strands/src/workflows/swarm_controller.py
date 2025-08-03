@@ -6,9 +6,10 @@ from typing import Dict, List, Any, Optional
 from datetime import datetime
 
 from ..agents.base_agent import BaseResearchAgent, TaskData
+from ..config.logging_config import LoggerMixin
 
 
-class ResearchSwarmController:
+class ResearchSwarmController(LoggerMixin):
     """
     Controller for coordinating parallel research execution across multiple agents.
     
@@ -33,12 +34,31 @@ class ResearchSwarmController:
             from configs.agent_settings import get_agent_settings
             settings = get_agent_settings()
             concurrency_settings = settings.get_concurrency_settings()
-            self.concurrent_limit = concurrency_settings.get("max_parallel_research", 3)
-            self.task_timeout = concurrency_settings.get("task_timeout", 300)  # 5 minutes
+            swarm_settings = settings.get_swarm_settings()
+            
+            # Use concurrency settings for parallel limits
+            self.concurrent_limit = concurrency_settings.get("parallel_tasks", 3)
+            
+            # Use swarm settings for task-specific configuration
+            self.task_timeout = swarm_settings.get("task_timeout", 300)
+            self.effort_multipliers = swarm_settings.get("effort_multipliers", {
+                "low": 1.0, "medium": 2.0, "high": 3.0
+            })
+            self.confidence_thresholds = swarm_settings.get("confidence_thresholds", {
+                "high_relevance": 0.9,
+                "medium_relevance": 0.85,
+                "default_confidence": 0.85
+            })
         except ImportError:
             # Fallback configuration
             self.concurrent_limit = 3
             self.task_timeout = 300  # 5 minutes
+            self.effort_multipliers = {"low": 1.0, "medium": 2.0, "high": 3.0}
+            self.confidence_thresholds = {
+                "high_relevance": 0.9,
+                "medium_relevance": 0.85,
+                "default_confidence": 0.85
+            }
         
         # Task management
         self.research_queue = asyncio.Queue()
@@ -60,7 +80,12 @@ class ResearchSwarmController:
         Returns:
             Aggregated research results
         """
+        self.log_method_entry("coordinate_parallel_research", 
+                            subtopic_count=len(subtopics),
+                            concurrent_limit=self.concurrent_limit)
+        
         if not subtopics:
+            self.logger.warning("No subtopics provided for parallel research")
             return {"subtopic_results": {}, "coordination_summary": "No subtopics provided"}
         
         await self.supervisor.log_task_progress(
@@ -85,6 +110,13 @@ class ResearchSwarmController:
             # Process and aggregate results
             aggregated_results = await self._aggregate_research_results(results)
             
+            # Log structured success information
+            self.logger.info("Parallel research completed successfully",
+                           method="coordinate_parallel_research",
+                           successful_tasks=len(aggregated_results.get("subtopic_results", {})),
+                           failed_tasks=len(self.failed_tasks),
+                           total_execution_time=aggregated_results.get("total_execution_time", 0))
+            
             await self.supervisor.log_task_progress(
                 self.supervisor.session_id or "unknown",
                 "parallel_research_completed",
@@ -95,9 +127,17 @@ class ResearchSwarmController:
                 }
             )
             
+            self.log_method_exit("coordinate_parallel_research", 
+                               result_count=len(aggregated_results.get("subtopic_results", {})))
             return aggregated_results
             
         except Exception as e:
+            self.logger.error("Parallel research execution failed",
+                            method="coordinate_parallel_research",
+                            error_type=type(e).__name__,
+                            error_message=str(e),
+                            subtopic_count=len(subtopics))
+            
             await self.supervisor.log_task_progress(
                 self.supervisor.session_id or "unknown",
                 "parallel_research_failed",
@@ -257,8 +297,10 @@ class ResearchSwarmController:
             Simulated research result
         """
         # Simulate variable execution time based on effort
-        effort_times = {"low": 1.0, "medium": 2.0, "high": 3.0}
-        base_time = effort_times.get(subtopic.get("estimated_effort", "medium"), 2.0)
+        base_time = self.effort_multipliers.get(
+            subtopic.get("estimated_effort", "medium"), 
+            self.effort_multipliers.get("medium", 2.0)
+        )
         
         await asyncio.sleep(base_time)  # Simulate work
         
@@ -278,15 +320,15 @@ class ResearchSwarmController:
                 {
                     "title": f"Academic Source for {subtopic.get('title', 'topic')}",
                     "url": "https://example.com/academic1",
-                    "relevance": 0.9
+                    "relevance": self.confidence_thresholds.get("high_relevance", 0.9)
                 },
                 {
                     "title": f"Research Paper on {subtopic.get('title', 'topic')}",
                     "url": "https://example.com/paper1",
-                    "relevance": 0.85
+                    "relevance": self.confidence_thresholds.get("medium_relevance", 0.85)
                 }
             ],
-            "confidence_score": 0.85,
+            "confidence_score": self.confidence_thresholds.get("default_confidence", 0.85),
             "research_method": "parallel_swarm_research"
         }
         

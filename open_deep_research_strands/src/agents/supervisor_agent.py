@@ -11,6 +11,8 @@ from .quality_controller import QualityController
 from .error_handler import ResearchErrorHandler
 from ..workflows.swarm_controller import ResearchSwarmController
 from ..tools.llm_interface import create_message
+from ..config.validation_schemas import validate_input, validate_research_request
+from ..exceptions import AgentValidationError
 # Load agent settings with fallback
 try:
     from configs.agent_settings import get_agent_settings
@@ -90,11 +92,22 @@ class SupervisorAgent(BaseResearchAgent, AgentCapabilityMixin):
         Returns:
             Final research result
         """
-        if not await self.validate_task_data(task_data, ["user_query"]):
+        # Enhanced task data validation
+        from ..config.validation_schemas import validate_task_data_enhanced
+        
+        # Convert task_data to dict for validation
+        task_dict = {
+            "task_id": task_data.task_id,
+            "content": task_data.content,
+            "metadata": getattr(task_data, 'metadata', {})
+        }
+        
+        validation_result = validate_task_data_enhanced(task_dict)
+        if not validation_result.is_valid:
             return self.create_result(
                 task_data.task_id, 
                 False, 
-                error="Missing required field: user_query"
+                error=f"Task data validation failed: {'; '.join(validation_result.errors)}"
             )
         
         user_query = task_data.content["user_query"]
@@ -134,6 +147,23 @@ class SupervisorAgent(BaseResearchAgent, AgentCapabilityMixin):
         Returns:
             Complete research results
         """
+        # Comprehensive input validation
+        validation_data = {
+            "user_query": user_query,
+            "parameters": parameters or {}
+        }
+        
+        validation_result = validate_research_request(validation_data)
+        if not validation_result.is_valid:
+            error_msg = f"Invalid research request: {'; '.join(validation_result.errors)}"
+            raise AgentValidationError(error_msg)
+        
+        # Log any validation warnings
+        if validation_result.warnings:
+            await self.log_task_progress("validation", "validation_warnings", {
+                "warnings": validation_result.warnings
+            })
+        
         start_time = datetime.utcnow()
         session_id = f"research_session_{start_time.strftime('%Y%m%d_%H%M%S')}"
         self.session_id = session_id

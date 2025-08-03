@@ -671,7 +671,7 @@ class ResearchErrorHandler:
                     )
                     
                     # Execute the recovery strategy
-                    strategy_result = await strategy.execute_func(exception, context)
+                    strategy_result = await strategy.handler(exception, context)
                     
                     # Check if recovery was successful
                     if strategy_result and strategy_result.get("success", False):
